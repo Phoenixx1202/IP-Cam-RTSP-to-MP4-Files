@@ -52,3 +52,7 @@ export const uploadFileToDrive = async (filePath) => {
         console.error('Erro ao enviar o arquivo:', err.message);
     }
 };
+
+// esse é apenas um exemplo basico de como fazer upload dos arquivos no googledrive
+// esse codigo precisa de ajustes para remover o arquivo local apos enviar ele no googledrive
+// verifique o arquivo rclone-onedrive.js para entender melhor como funciona

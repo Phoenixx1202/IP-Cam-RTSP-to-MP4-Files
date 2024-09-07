@@ -1,21 +1,20 @@
-import crypto from 'crypto';
 import ffmpeg from 'fluent-ffmpeg';
-import fs from 'fs';
 import path from 'path';
+import fs from 'fs';
+import Queue from 'queue';
 
-import './cronRestartScript.js'
-// import sendVideo from './telegram.js'
-// import { uploadFileToDrive } from './googledrive.js';
-// import saveOnOnedrive from './rclone/onedrive.js'
-// import sendFile from './rclone-onedrive.js'
-import uploadFile from './onedrive.js'
+// modifique aqui qual cloud voce irá importar pra salvar os arquivos.
+import sendFile from './rclone-onedrive.js';
 
-const segmentTimeSize = 300
-const uploadLoop = 10000
-const url = 'rtsp://suaHostRTSP'
+const rtspUrl = 'rtsp://...' // a URL RTSP da sua camera
+const duration = 60 * 5; // 5 minutos em segundos
 const folderPath = './';
-let processedFiles = [];
+const fila = new Queue({ autostart: true, concurrency: 1 });
+fila.start()
 
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// remove os arquivos mp4 antigos ao reiniciar (para evitar uploads repetidos)
 fs.readdir(folderPath, (err, files) => {
     if (err) {
         console.error('Erro ao ler a pasta:', err);
@@ -23,7 +22,7 @@ fs.readdir(folderPath, (err, files) => {
     }
 
     files.forEach((file) => {
-        if (path.extname(file) === '.mp4') {
+        if (path.extname(file) === '.mp4' && file.includes("output")) {
             fs.unlink(path.join(folderPath, file), (err) => {
                 if (err) {
                     console.error('Erro ao remover o arquivo:', err);
@@ -35,91 +34,75 @@ fs.readdir(folderPath, (err, files) => {
     });
 });
 
-ffmpeg(url)
-    .inputOptions([
-        '-rtsp_transport tcp'
-    ])
-    .outputOptions([
-        '-c:v copy',
-        '-c:a aac',
-        '-b:v 2M',
-        '-f segment',
-        '-segment_time ' + segmentTimeSize,
-        '-segment_wrap 5',
-        '-reset_timestamps 1'
-    ])
-    .output('output_%03d.mp4')
-    .on('start', function (commandLine) {
-        console.log('Streaming started:', commandLine);
-    })
-    .on('error', function (err, stdout, stderr) {
-        console.error('An error occurred:', err.message);
-        console.error('stdout:', stdout);
-        console.error('stderr:', stderr);
-        process.exit();
-    })
-    .on("end", () => {
-        console.log("FFMPEG end ⚠️");
-        process.exit();
-    })
-    .run();
+// inicia a gravação dos arquivos mp4, ao finalizar, adiciona na fila de upload
+function startRecording() {
+    return new Promise((resolve, reject) => {
 
+        const timestamp = Date.now();
+        const outputPath = path.join(folderPath, `output_${timestamp}.mp4`);
 
-function getFileHash(filePath) {
-    const fileBuffer = fs.readFileSync(filePath);
-    const hashSum = crypto.createHash('md5');
-    hashSum.update(fileBuffer);
-    return hashSum.digest('hex');
+        // ffmpeg recebe a stream e grava o tempo definido na variavel duration
+        ffmpeg(rtspUrl)
+            .inputOptions([
+                // define como tcp para que os pacotes de dados chegem de forma sequencial
+                // bom para cameras via wifi onde a rede varia, evitando travamentos constantes (mas ainda podem ocorrer)
+                '-rtsp_transport tcp'
+            ])
+            .outputOptions([
+                '-t', `${duration}`, // Duração de cada arquivo
+                '-c:v', 'copy', // Copia o vídeo sem recodificação, evitando carga na CPU
+            ])
+            // inicia a gravação
+            .on('start', () => {
+                console.log(`Iniciando gravação: ${outputPath}`);
+            })
+            // ao finalizar a gravação, envia pra fila de upload
+            .on('end', () => {
+                console.log(`Gravação concluída: ${outputPath}`);
+
+                // esquema de fila assincrona para que a gravação e o upload dos arquivos
+                // ocorram de forma independente, sem que seja necessario
+                // esperar pelo upload atual para que o proximo arquivo começe a ser gravado.
+                // dessa forma, o arquivo concluido vai pra fila de upload e o proximo ja começa a ser gravado.
+                fila.push(async () => {
+                    console.log("--> upando", outputPath);
+                    await sendFile(outputPath);
+                    console.log("fim", outputPath);
+                });
+
+                resolve();
+            })
+
+            // caso ocorra um erro, rejeita a execução
+            .on('error', (err) => {
+                console.error(`Erro na gravação:`, err);
+
+                // caso ocorra algum erro durante a gravação do arquivo, ele é removido e o loop passa pro proximo
+                // evita acumulo de arquivos com erro
+                try {
+                    fs.promises.unlink(outputPath)
+                } catch (error) { }
+                reject(err);
+            })
+            .save(outputPath);
+    });
 }
 
-function getMP4Files() {
 
-    const files = fs.readdirSync(folderPath);
-
-    let mp4Files = files.map(file => {
-        if (!file.includes(".mp4")) return;
-        if (fs.lstatSync(file).isDirectory()) return;
-
-        const filePath = path.join(folderPath, file);
-        const fileHash = getFileHash(filePath);
-        return { file: file, hash: fileHash }
-    });
-
-    mp4Files = mp4Files.filter(f => f)
-
-    // organiza os arquivos de acordo com o Date de modificação, do mais novo para o mais antigo
-    mp4Files.sort((a, b) => {
-        const aStats = fs.statSync(path.join(folderPath, a.file));
-        const bStats = fs.statSync(path.join(folderPath, b.file));
-        return bStats.mtimeMs - aStats.mtimeMs;
-    });
-
-    return mp4Files;
-}
-
-setInterval(async () => {
-
-    let mp4Files = getMP4Files();
-    if (mp4Files.length < 2) return
-    mp4Files = mp4Files.filter(file => file.file.includes("output"))
-    let files = mp4Files.slice(1)
-    for (let file of files) {
-        processedFiles = [... new Set(processedFiles)]
-        if (!processedFiles.includes(file.hash)) {
-            console.log("--> upando", file.file)
-            // sendVideo(file.file)
-            // uploadFileToDrive(file.file)
-            // saveOnOnedrive(file.file)
-            // sendFile(file.file)
-            uploadFile(file.file)
-            processedFiles.push(file.hash)
+// função em loop para reiniciar a gravação caso ocorra algum erro no ffmpeg
+// evita que o script crashe caso ocorra alguma variação na rede
+async function continuousRecording() {
+    while (true) {
+        try {
+            await startRecording();
+        } catch (err) {
+            // evita que o loop fique descontrolado caso ocorra erros constantes
+            // cada loop irá esperar 2s para iniciar o proximo em caso de erro
+            await sleep(2000)
+            console.log('Falha de rede ou erro de gravação, reiniciando...');
+            console.log(err);
         }
     }
+}
 
-    // codigo que evita que o array de arquivos processados cresca indefinidamete, caso chegue em 100 items, ele remove os 50 primeiros
-    if (processedFiles.length >= 100) {
-        console.log('==> limpando array')
-        processedFiles = processedFiles.slice(50)
-    }
-
-}, uploadLoop);
+continuousRecording();

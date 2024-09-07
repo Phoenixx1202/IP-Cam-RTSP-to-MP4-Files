@@ -3,7 +3,7 @@
 </br>
 
 ### Motivação:
-Na necessidade de ter uma câmera de segurança em casa, comprei um modelo IP no Aliexpress por 80 reais.
+### Na necessidade de ter uma câmera de segurança em casa, comprei um modelo IP no Aliexpress por 80 reais.
 </br>
 </br>
 Porém, para minha infelicidade, o app de controle da câmera é inútil para recuperar gravações do cartão de memória colocado na câmera. O app também possui planos pagos para armazenar as gravações em uma nuvem própria da marca, mas achei problemático depender de serviços fora do meu controle pra armazenar conteúdo sensível como gravações de segurança.
@@ -17,9 +17,9 @@ Esse projeto surgiu dessa necessidade.
 </br>
 
 ### Como funciona:
-Esse projeto foi feito em node.js usando FFMPEG para receber a Stream RTSP e converter em arquivos mp4. os arquivos mp4 são gerados automaticamente e substituídos em loop.
+Esse projeto foi feito em node.js usando FFMPEG para receber a Stream RTSP e converter em arquivos mp4. os arquivos mp4 são gerados automaticamente e enviados individualmente em fila após finalizar a gravação de acordo com a duração definida para os arquivos.
 </br>
-O código inicia o FFMPEG, e fica monitorando os arquivos gerados para enviar para as clouds suportadas.
+O código inicia o FFMPEG, e gera os arquivos mp4 com X duração em minutos, após um arquivo ser finalizado, ele é adicionado em uma fila de upload e o próximo já começa a ser gravado.
 
 </br>
 
@@ -74,7 +74,7 @@ Tem uma adaptação no código para usar o rclone caso você queira usar outra c
 2 - Defina a Host RTSP que você deseja usar dentro de `index.js`
 </br>
 </br>
-3 - Configure o tamanho em minutos que cada arquivo individual terá, dentro de `index.js` > `segmentTimeSize=300`(5min)
+3 - Configure o tamanho em minutos que cada arquivo individual terá, dentro de `index.js` > `const duration = 60 * 5` (5min)
 </br>
 </br>
 4 - Instale o FFMPEG no sistema.
@@ -91,7 +91,7 @@ Crie um canal no telegram, adicione o bot nele e pegue o ID do canal (ex: -10099
 </br>
 Acesse o arquivo `telegram.js` e adicione o token do bot e o ID do canal.
 </br>
-No arquivo `index.js`, faça o import da função `SendVideo` fornecida pelo `telegram.js` e remova o comentário que chama a função dentro do laço for no fim do arquivo `index.js`
+No arquivo `index.js`, faça o import da função `SendVideo` fornecida pelo `telegram.js` e na linha 69 do arquivo `index.js`, troque a função pelo `SendVideo` do telegram
 
 </br>
 </br>
@@ -106,7 +106,7 @@ Crie um `service_account` e baixe o json, armazene o json na raiz do projeto com
 </br>
 Acesse o arquivo `googledrive.js` e cole o ID da pasta que você deseja salvar os arquivos em `const folderID=` (Dica: abra a pasta no google drive pelo navegador e copie o código após `drive/u/0/folders/>ID<`)
 </br>
-No arquivo `index.js`, faça o import da função `uploadFileToDrive` fornecida pelo `googledrive.js` e remova o comentário que chama a função dentro do laço for no fim do arquivo `index.js`
+No arquivo `index.js`, faça o import da função `uploadFileToDrive` fornecida pelo `googledrive.js` e na linha 69 do arquivo `index.js`, troque a função pelo `uploadFileToDrive` do googledrive
 
 </br>
 </br>
@@ -122,6 +122,8 @@ Siga esse tutorial: [Retrieving Access Token From OneDrive using Google Apps Scr
 No fim do tutorial, pegue o `refreshToken`, o `clientID` e o `clientSecret` e adicione no arquivo `onedrive.js`
 </br>
 Modifique a pasta que voce quer usar no onedrive no arquivo `onedrive.js` `const onedriveFolder =`
+</br>
+No arquivo `index.js`, faça o import da função `sendFile` fornecida pelo `onedrive.js` e na linha 69 do arquivo `index.js`, troque a função pelo `sendFile` do onedrive
 
 </br>
 </br>
@@ -130,9 +132,9 @@ Modifique a pasta que voce quer usar no onedrive no arquivo `onedrive.js` `const
 
 - Rclone
 </br>
-Instale o Rclone no sistema e configure a cloud que você deseja usar para salvar os arquivos (sugiro pesquisar como funciona o rclone primeiro antes de fazer isso)
+Instale o Rclone no sistema e configure a cloud que você deseja usar para salvar os arquivos **(sugiro pesquisar como funciona o rclone primeiro antes de fazer isso)**
 </br>
-Use o arquivo `rclone-onedrive.js` como base para configurar. Na linha 37, modifique o comando para usar a cloud que você configurou no rclone.
+Use o arquivo `rclone-onedrive.js` como base para configurar. Na linha 38, modifique o comando para usar a cloud que você configurou no rclone.
 
 </br>
 </br>
@@ -149,17 +151,18 @@ O projeto pode ser executado com Docker ou com PM2 e está adaptado para funcion
 
 ### Funcionando no Termux:
 
-#### Estou executando esse projeto em um Moto g7 play via Termux (celular parado sem uso e com baixissimo consumo de energia)
+#### Comecei executando esse projeto em um Moto g7 play via Termux (celular parado sem uso e com baixissimo consumo de energia)
+
 
 ![plot](./src/termux.jpg)
-
+funcionou muito bem, porém a bateria inchou por ficar muito tempo na tomada kkkkk acabei trocando por um mini pc que ganhei de um amigo, rodando em docker perfeitamete.
 </br>
 </br>
 </br>
 
 ![plot](./src/onedrive1.png)
 </br>
-Exemplo de arquivos salvos no OneDrive
+Exemplo de arquivos salvos no OneDrive agrupados por dia
 
 </br>
 </br>
@@ -167,12 +170,12 @@ Exemplo de arquivos salvos no OneDrive
 
 ![plot](./src/onedrive2.png)
 </br>
-Exemplo de arquivos salvos no OneDrive
+Exemplo de arquivos salvos no OneDrive, cada um com sua data e hora
 
 </br>
 </br>
 </br>
 </br>
 
-### Projeto ainda em desenvolvimento, código não está perfeito.
+### Projeto ainda em desenvolvimento (mas funcionando), código não está perfeito.
 - sinta se a vontade para contribuir! 🤜🤛

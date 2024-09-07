@@ -28,13 +28,14 @@ export default async function sendFile(nomeArquivo) {
                 addZero(date.getMinutes()) +
                 ';' +
                 addZero(date.getSeconds())
+            
+            const cloudFolderByDate = `${addZero(date.getDate())}-${addZero(date.getMonth() + 1)}-${date.getFullYear()}`
 
             const processedFileName = `${filename + fileExtension}`;
             processedFilePath = path.join(path.dirname(nomeArquivo), processedFileName);
             fs.renameSync(nomeArquivo, processedFilePath);
 
-
-            const comando = `rclone copy "${processedFilePath}" onedrive:0-ipcam/${addZero(date.getDate())}-${addZero(date.getMonth() + 1)}-${date.getFullYear()}`;
+            const comando = `rclone copy "${processedFilePath}" onedrive:0-ipcam/${cloudFolderByDate}`;
 
             exec(comando, (error, stdout, stderr) => {
                 if (error) {
