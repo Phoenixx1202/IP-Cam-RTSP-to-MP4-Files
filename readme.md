@@ -174,6 +174,16 @@ Exemplo de arquivos salvos no OneDrive, cada um com sua data e hora
 
 </br>
 </br>
+
+### Possíveis problemas
+#### **script está dando erro logo ao iniciar "Erro na gravação: Error: ffmpeg exited with code 1:"**
+    esse erro pode ser proveniente da configuração de timeout do ffmpeg.
+    Sem essa configuração pode acontecer do ffmpeg congelar esperando dados da camera.
+    Essa configuração varia dependendo da versão do ffmpeg.
+
+    Acesse o arquivo index.js e leia as linhas 50 a 53
+    remova o comentario de uma das opções de acordo com a versão do seu ffmpeg.
+    para saber a versão, execute "ffmpeg -version"
 </br>
 </br>
 

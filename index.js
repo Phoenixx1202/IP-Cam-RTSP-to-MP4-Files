@@ -46,7 +46,11 @@ function startRecording() {
             .inputOptions([
                 // define como tcp para que os pacotes de dados chegem de forma sequencial
                 // bom para cameras via wifi onde a rede varia, evitando travamentos constantes (mas ainda podem ocorrer)
-                '-rtsp_transport tcp'
+                '-rtsp_transport tcp',
+                // ative essa opção caso o script congele e pare de gerar as novas gravações
+                // "-timeout 10000" // caso seu ffmpeg seja acima do 5
+                "-stimeout 10000" // caso seu ffmpeg seja abaixo do 5
+                // ative apenas 1 desses
             ])
             .outputOptions([
                 '-t', `${duration}`, // Duração de cada arquivo
