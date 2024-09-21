@@ -6,10 +6,12 @@ import Queue from 'queue';
 // modifique aqui qual cloud voce irá importar pra salvar os arquivos.
 import sendFile from './rclone-onedrive.js';
 
+// ⬇️⬇️⬇️⬇️⬇️⬇️⬇️⬇️⬇️
 const rtspUrl = 'rtsp://...' // a URL RTSP da sua camera
+// ⬆️⬆️⬆️⬆️⬆️⬆️⬆️⬆️⬆️
 const duration = 60 * 5; // 5 minutos em segundos
 const folderPath = './';
-const fila = new Queue({ autostart: true, concurrency: 1 });
+const fila = new Queue({ autostart: true, concurrency: 1, timeout: 30000 });
 fila.start()
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -41,16 +43,15 @@ function startRecording() {
         const timestamp = Date.now();
         const outputPath = path.join(folderPath, `output_${timestamp}.mp4`);
 
+        // timeout para impedir que o ffmpeg congele por qualquer motivo (queda de rede, stream morta, etc)
+        let timeout = null
+
         // ffmpeg recebe a stream e grava o tempo definido na variavel duration
-        ffmpeg(rtspUrl)
+        let ffProcess = ffmpeg(rtspUrl)
             .inputOptions([
                 // define como tcp para que os pacotes de dados chegem de forma sequencial
                 // bom para cameras via wifi onde a rede varia, evitando travamentos constantes (mas ainda podem ocorrer)
-                '-rtsp_transport tcp',
-                // ative essa opção caso o script congele e pare de gerar as novas gravações
-                // `-timeout ${duration*1001}` // caso seu ffmpeg seja acima do 5
-                `-stimeout ${duration*1001}` // caso seu ffmpeg seja abaixo do 5
-                // ative apenas 1 desses
+                // '-rtsp_transport tcp',
             ])
             .outputOptions([
                 '-t', `${duration}`, // Duração de cada arquivo
@@ -58,20 +59,24 @@ function startRecording() {
             ])
             // inicia a gravação
             .on('start', () => {
-                console.log(`Iniciando gravação: ${outputPath}`);
+                console.log(`⏩: ${outputPath}`);
             })
             // ao finalizar a gravação, envia pra fila de upload
             .on('end', () => {
-                console.log(`Gravação concluída: ${outputPath}`);
+                console.log(`🏁: ${outputPath}`);
+
+                // limpa o timeout ao finalizar a gravação
+                try {
+                    clearTimeout(timeout)
+                } catch (error) {}
 
                 // esquema de fila assincrona para que a gravação e o upload dos arquivos
                 // ocorram de forma independente, sem que seja necessario
                 // esperar pelo upload atual para que o proximo arquivo começe a ser gravado.
                 // dessa forma, o arquivo concluido vai pra fila de upload e o proximo ja começa a ser gravado.
                 fila.push(async () => {
-                    console.log("--> upando", outputPath);
+                    console.log('🔺🌐', outputPath)
                     await sendFile(outputPath);
-                    console.log("fim", outputPath);
                 });
 
                 resolve();
@@ -89,6 +94,13 @@ function startRecording() {
                 reject(err);
             })
             .save(outputPath);
+        
+        // timeout para impedir que o ffmpeg congele por qualquer motivo (queda de rede, stream morta, etc)
+        timeout = setTimeout(() => {
+            console.log("⛔timeout")
+            ffProcess.kill()
+            resolve();
+        }, (duration * 2000)); // aguarda o dobro do tempo definido na const "duration". se a execução ffmpeg demorar o dobro da duration, mata o processo
     });
 }
 

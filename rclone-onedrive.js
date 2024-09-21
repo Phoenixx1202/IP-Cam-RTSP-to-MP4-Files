@@ -1,10 +1,21 @@
 import { exec } from 'child_process';
 import path from 'path';
-import fs from 'fs';
+import fs, { promises as fsPromisses } from 'fs';
 
 const addZero = (num) => num.toString().padStart(2, '0');
 
-export default async function sendFile(nomeArquivo) {
+async function getFileModificationDate(filePath) {
+    try {
+        const stats = await fsPromisses.stat(filePath);
+        return new Date(stats.ctime);
+    } catch (error) {
+        console.log(`Erro ao ler o arquivo: ${error.message}`);
+        return new Date()
+    }
+}
+
+
+export default async function sendFile(nomeArquivo, inputDate) {
     return new Promise((resolve, reject) => {
         let processedFilePath = undefined
         try {
@@ -14,8 +25,7 @@ export default async function sendFile(nomeArquivo) {
             }
             const fileExtension = path.extname(nomeArquivo);
 
-            // Renomeia o arquivo para "processed" mantendo a extensão
-            const date = new Date()
+            const date = inputDate || await getFileModificationDate(nomeArquivo)
             const filename =
                 addZero(date.getDate()) +
                 '-' +
@@ -44,7 +54,7 @@ export default async function sendFile(nomeArquivo) {
                     resolve(null);
                 } else {
                     delFile(processedFilePath)
-                    console.log("sucesso")
+                    console.log("✅", nomeArquivo)
                     resolve(true);
                 }
             });
